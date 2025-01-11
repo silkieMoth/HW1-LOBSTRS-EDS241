@@ -79,6 +79,7 @@ Step 1: Anticipating potential sources of selection bias
 
 **a.** Do the control sites (Arroyo Quemado, Carpenteria, and Mohawk) provide a strong counterfactual for our treatment sites (Naples, Isla Vista)? Write a paragraph making a case for why this comparison is centris paribus or whether selection bias is likely (be specific!).  
 
+It's potentially impossible to create an 'all other things equal' study in a field setting, because there are so many stochastic factors. Some degree of selection bias is likely always present in field studies, as you are selecting a transect to represent an entire ecosystem. But environmental conditions are heterogeneous and each transect could have it's own unique qualities. In this case, differences such as local human activity, development, slope/elevation of nearby land, unforeseen historical factors, etc, could skew the data. That being said, we can at least set up a study that's close enough to centris paribus for the results to be meaningful. Here, all sites are located in the same general ecological zone, and they are all south facing. They may not be the same size, but this can be acknowledged and accounted for.
 ------------------------------------------------------------------------
 
 Step 2: Read & wrangle data
@@ -90,8 +91,9 @@ Step 2: Read & wrangle data
 ```{r}
 # HINT: check for coding of missing values (`na = "-99999"`)
 
-rawdata <- 
-
+rawdata <- read_csv(here('data', 'lobster_sbchannel_24.csv')) %>% 
+    clean_names() %>% 
+    mutate(size_mm = na_if(size_mm, -99999))
 ```
 
 **c.** Create a new `df` named `tidyata`. Using the variable `site` (reef location) create a new variable `reef` as a `factor` and add the following labels in the order listed (i.e., re-order the `levels`): 
