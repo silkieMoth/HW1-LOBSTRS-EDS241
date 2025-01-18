@@ -96,13 +96,16 @@ rawdata <- read_csv(here('data', 'lobster_sbchannel_24.csv')) %>%
     mutate(size_mm = na_if(size_mm, -99999))
 ```
 
-**c.** Create a new `df` named `tidyata`. Using the variable `site` (reef location) create a new variable `reef` as a `factor` and add the following labels in the order listed (i.e., re-order the `levels`): 
+**c.** Create a new `df` named `tidydata`. Using the variable `site` (reef location) create a new variable `reef` as a `factor` and add the following labels in the order listed (i.e., re-order the `levels`): 
     
     "Arroyo Quemado", "Carpenteria", "Mohawk", "Isla Vista",  "Naples"
 
 ```{r}
 
-tidydata <- 
+tidydata <- rawdata %>%
+    mutate(reef = factor(site, 
+                         levels = c("AQUE", "CARP", "MOHK", "IVEE", "NAPL"), 
+                         labels = c("Arroyo Quemado", "Carpenteria", "Mohawk", "Isla Vista",  "Naples")))
     
 ```
 
@@ -121,8 +124,19 @@ Create new `df` named `spiny_counts`
 
 #HINT(e): Use `case_when()` to create the 3 new variable columns
 
-spiny_counts <- 
-
+spiny_counts <- tidydata %>%
+    mutate(mpa = case_when(
+                  site %in% c("AQUE", "CARP", "MOHK") ~ 'MPA',
+                  site %in% c("IVEE", "NAPL") ~ 'non_MPA'
+              ), 
+              treat = case_when(
+                  mpa == 'MPA' ~ 1,
+                  mpa == 'non_MPA' ~ 0)) %>%
+    group_by(site, year, transect) %>%
+    reframe(counts = n(), 
+            mean_size = mean(size_mm, na.rm = TRUE), 
+            mpa = first(mpa),
+            treat = first(treat))
 ```
 
 > NOTE: This step is crucial to the analysis. Check with a friend or come to TA/instructor office hours to make sure the counts are coded correctly!
@@ -153,10 +167,105 @@ Create a plot of lobster **size** :
 4) You choose the grouping variable(s)!
 
 ```{r}
-# plot 1: ....
+# plot 1: violin w SD
+
+#median_df <- spiny_counts %>% group_by(site) %>% summarize_at(vars(counts), list(median = mean))
 
 spiny_counts %>% 
-ggplot()
+    ggplot(aes(x = counts, y = factor(site, levels = c('IVEE', 'CARP', 'MOHK', 'NAPL', 'AQUE')))) + 
+    geom_violin(width = 1.5) + 
+    stat_summary(fun.data="mean_sdl", fun.args = c(mult = 1), 
+                 geom="pointrange", aes(color = 'Standard Deviation')) + 
+    #geom_boxplot(width = 0.1) +
+    # stat_summary(fun = "median",
+    #            geom = "boxplot", 
+    #            width = 1,
+    #            aes(xlower = quantile(spiny_counts$counts, na.rm = TRUE)[1], 
+    #                xmiddle = quantile(spiny_counts$counts, na.rm = TRUE)[3], 
+    #                xupper = quantile(spiny_counts$counts, na.rm = TRUE)[5], 
+    #                color = "boxplot")) + 
+#    stat_summary(fun = "median",
+#               geom = "crossbar", 
+#               width = 1,
+#               aes(color = "Median"),
+#               show.legend = FALSE) +
+#    stat_summary(fun = "median",
+#               geom = "vline",
+#               aes(xintercept = quantile(filter(spiny_counts, mpa == 'IVEE')$counts, na.rm = TRUE)[3], 
+#                   color = "Median"), 
+#               lwd = 1) + 
+    labs(x = 'Lobster Counts', 
+        y = 'Site') + 
+    scale_color_manual(name = '', values = c('red')) + 
+    scale_x_continuous(expand = c(0, NA)) + 
+    annotate('text', x = 100, y = 1.25:5.25, label = c(paste('SD:', sd(filter(spiny_counts, site == 'IVEE')$counts)), 
+                                                 paste('SD:', sd(filter(spiny_counts, site == 'CARP')$counts)),
+                                                 paste('SD:', sd(filter(spiny_counts, site == 'MOHK')$counts)),
+                                                 paste('SD:', sd(filter(spiny_counts, site == 'NAPL')$counts)),
+                                                 paste('SD:', sd(filter(spiny_counts, site == 'AQUE')$counts)))) + 
+    guides(fill = FALSE)
+
+# plot 2: ridge
+
+spiny_counts %>% 
+    ggplot(aes(x = counts, fill = mpa)) + 
+        geom_density(alpha = 0.5) + 
+    geom_vline(aes(xintercept = c(quantile(filter(spiny_counts, mpa == 'MPA')$counts, na.rm = TRUE)[3]), 
+                   color = 'MPA'), 
+               lwd = 1.5) +
+    geom_vline(aes(xintercept = c(quantile(filter(spiny_counts, mpa == 'non_MPA')$counts, na.rm = TRUE)[3]), 
+                   color = 'Non-MPA'), 
+               lwd = 1.5) + 
+    labs(y = 'Density') + 
+    guides(fill = guide_legend(title = 'MPA Status')) + 
+    scale_color_manual(name = 'Medians', values = c('MPA' = 'red', 'Non-MPA' = 'blue')) + 
+    annotate('text', x = 100, y = 0.035, label = c('Medians')) + 
+    annotate('text', x = 100, y = c(0.031, 0.029), label = c(paste('MPA:', median(filter(spiny_counts, mpa == 'MPA')$counts)), paste('Non-MPA', median(filter(spiny_counts, mpa == 'non_MPA')$counts))))
+
+# # plot 3: histogram
+spiny_counts %>% 
+    ggplot(aes(x = counts, y = as.factor(year), fill = stat(quantile))) +
+    ggridges::stat_density_ridges(quantile_lines = FALSE, 
+                                  calc_ecdf = TRUE,
+                                  geom = "density_ridges_gradient") + 
+    labs(x = 'Lobster Counts',
+         y = 'Year') + 
+    scale_x_continuous(expand = c(0, NA)) + 
+    scale_fill_manual(name = "Quantile",
+                      values = viridisLite::mako(4),
+                      labels = c('25%', '50%', '75%', '100%'))
+
+
+
+
+```
+
+```{r}
+# plot 4: ...
+spiny_counts %>% 
+    ggplot(aes(x = mpa, y = mean_size, color = site)) + 
+        ggbeeswarm::geom_beeswarm(cex = 1.5) + 
+    geom_hline(aes(yintercept = mean(filter(spiny_counts, site == 'IVEE')$mean_size, na.rm = TRUE)), 
+               color = viridisLite::turbo(5)[3]) +
+    geom_hline(aes(yintercept = mean(filter(spiny_counts, site == 'CARP')$mean_size, na.rm = TRUE)), 
+               color = viridisLite::turbo(5)[2]) + 
+    geom_hline(aes(yintercept = mean(filter(spiny_counts, site == 'MOHK')$mean_size, na.rm = TRUE)), 
+               color = viridisLite::turbo(5)[4]) +
+    geom_hline(aes(yintercept = mean(filter(spiny_counts, site == 'NAPL')$mean_size, na.rm = TRUE)), 
+               color = viridisLite::turbo(5)[5]) + 
+    geom_hline(aes(yintercept = mean(filter(spiny_counts, site == 'AQUE')$mean_size, na.rm = TRUE)), 
+               color = viridisLite::turbo(5)[1]) + 
+    guides(color = guide_legend(title = 'Site')) + 
+    annotate('text', x = 1.1, y = 115, label = 'Mean size by site depicted by respective colors:') + 
+    annotate("segment", x = c(0.65, 0.85, 1.05, 1.25, 1.45), xend = c(0.8, 1, 1.2, 1.4, 1.6), y = 110, yend = 110,
+  color = viridisLite::turbo(5), lwd = 1.5) + 
+    annotate('rect', xmin = 0.45, xmax = 1.75, ymin = 105, ymax = 120, fill = NA, color = '#00000070', lwd = 1) + 
+    labs(title = 'Mean Spiny Lobster Size in MPA vs Non-MPA Zones\nAlong the Southern California Coast',
+         x = 'MPA Status', 
+         y = 'Mean Size (mm)') + 
+    theme(plot.title = element_text(size = 13, hjust = 0.5)) + 
+    scale_color_manual(labels = c('Arroyo Quemado', 'Carpenteria', 'Isla Vista', 'Mohawk', 'Naples'), 
+                       values = viridisLite::turbo(5))
     
 ```
 
@@ -164,6 +273,7 @@ ggplot()
 
 ```{r}
 # USE: gt_summary::tbl_summary()
+tbl_summary(spiny_counts, treat)
 ```
 
 ------------------------------------------------------------------------
@@ -174,18 +284,37 @@ Step 4: OLS regression- building intuition
 
 **b.** Interpret the intercept & predictor coefficients *in your own words*. Use full sentences and write your interpretation of the regression results to be as clear as possible to a non-academic audience.
 
+This model would suggest that there is a extremely close relationship between treatment and count, as the R^2^ is approximately zero. This can be interpreted as there being an average difference of 6 in the lobster counts between the treatment sites and the non-treatment sites, with non-treatment sites having higher counts. Alternatively, it's possible that a linear model is just not appropriate to predict the relationship between these two variables.
+
 ```{r}
 # NOTE: We will not evaluate/interpret model fit in this assignment (e.g., R-square)
 
-m1_ols <- 
+m1_ols <- lm(counts ~ treat, spiny_counts)
 
 summ(m1_ols, model.fit = FALSE) 
+```
+
+```{r}
+summary(m1_ols)
+```
+
+
+```{r}
+spiny_counts %>% 
+    mutate(reg = fitted(m1_ols)) %>% 
+ggplot(aes(x = treat, y = counts)) + 
+    geom_point() + 
+    geom_line(aes(x = treat, y = reg))
 
 ```
 
 **c.** Check the model assumptions using the `check_model` function from the `performance` package
 
 **d.** Explain the results of the 4 diagnostic plots. Why are we getting this result?
+
+*   For the normality of residuals, when you run a linear regression for a model with a binary variable, you simply end up with points that have a very high residual, and some with coincidentally very low residuals because of the relationship between a binary variable and a straight line. This can be shown in both graphs, where there are specific regions in the data that are very far from the horizontal line, and some that are closer.
+*   The homogeneity of variance graph suggests that the relationship is heteroscedastic, because points do not at all form a straight line. Likely because the relationship to the line is so strange, it appears that the assumption of equal variance between all points is not true.
+*   The posterior predictive check graph assumes normal distribution of the data, which does not appear to be the case when you plot a linear model between counts and treatment. Because treatment is binary, all the data is bunched up around two points, 1 and 0. This can have strange results when attempting to plot a density graph.
 
 ```{r}
 check_model(m1_ols,  check = "qq" )
@@ -214,7 +343,11 @@ Step 5: Fitting GLMs
 
 **b.** Interpret the predictor coefficient in your own words. Use full sentences and write your interpretation of the results to be as clear as possible to a non-academic audience.
 
+The poisson glm still shows a very close relationship between treatment and counts. It can be interpreted as the chance of a lobster count being from a treatment site or a non-treatment site being different by about 28%, with treatment sites being more likely to have less lobsters than the non-treatment sites.
+
 **c.** Explain the statistical concept of dispersion and overdispersion in the context of this model. 
+
+Dispersion is another word for variance. Overdispersion is when there is greater dispersion in the data than was expected to be the case based on the predictions of a model. For a poisson regression, there is an assumption that variance = mean, but this may not be true in the actual data, and variance > mean, which is overdispersion. In the case of this model, overdispersion could occur either from spatial autocoorelation between transects, or ommitted variable bias.
 
 **d.** Compare results with previous model, explain change in the significance of the treatment effect
 
@@ -223,9 +356,35 @@ Step 5: Fitting GLMs
 
 #HINT2: For the second glm() argument `family` use the following specification option `family = poisson(link = "log")`
 
-m2_pois <- 
+m2_pois <- glm(counts ~ treat, family = poisson(link = 'log'), data = spiny_counts)
+
+summary(m2_pois)
 
 ```
+
+```{r}
+summ(m2_pois)
+```
+
+
+```{r}
+# getting mcfadden pseudo r2
+
+loglik_glm <- logLik(m2_pois)
+loglik_glm_null <- logLik(glm(counts ~ 1, family = poisson(link = 'log'), data = spiny_counts))
+
+1 - (loglik_glm/loglik_glm_null)
+```
+
+
+```{r}
+spiny_counts %>% 
+    mutate(reg = fitted(m2_pois)) %>% 
+ggplot(aes(x = treat, y = counts)) + 
+    geom_point() + 
+    geom_line(aes(x = treat, y = reg))
+```
+
 
 **e.** Check the model assumptions. Explain results.
 
