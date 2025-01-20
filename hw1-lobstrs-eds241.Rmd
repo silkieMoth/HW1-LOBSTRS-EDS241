@@ -32,7 +32,7 @@ knitr::opts_chunk$set(eval=FALSE, warning = FALSE, message = FALSE )
 -  Your knitted presentation should meet the quality you'd submit to research colleagues or feel confident sharing publicly. Refer to the rubric for details about presentation standards.
 
 
-**Assignment submission (YOUR NAME):** ______________________________________
+**Assignment submission (Joshua Paul Cohen):** ______________________________________
 
 
 ----------------------------------------------------------------------
@@ -80,6 +80,7 @@ Step 1: Anticipating potential sources of selection bias
 **a.** Do the control sites (Arroyo Quemado, Carpenteria, and Mohawk) provide a strong counterfactual for our treatment sites (Naples, Isla Vista)? Write a paragraph making a case for why this comparison is centris paribus or whether selection bias is likely (be specific!).  
 
 It's potentially impossible to create an 'all other things equal' study in a field setting, because there are so many stochastic factors. Some degree of selection bias is likely always present in field studies, as you are selecting a transect to represent an entire ecosystem. But environmental conditions are heterogeneous and each transect could have it's own unique qualities. In this case, differences such as local human activity, development, slope/elevation of nearby land, unforeseen historical factors, etc, could skew the data. That being said, we can at least set up a study that's close enough to centris paribus for the results to be meaningful. Here, all sites are located in the same general ecological zone, and they are all south facing. They may not be the same size, but this can be acknowledged and accounted for.
+
 ------------------------------------------------------------------------
 
 Step 2: Read & wrangle data
