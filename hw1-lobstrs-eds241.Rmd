@@ -273,7 +273,11 @@ spiny_counts %>%
 
 ```{r}
 # USE: gt_summary::tbl_summary()
-tbl_summary(spiny_counts, treat)
+tbl_summary(spiny_counts, 
+            treat, 
+            statistic = list(all_continuous() ~ "{mean}"), 
+            include = c(counts, mean_size), 
+            missing = 'no')
 ```
 
 ------------------------------------------------------------------------
@@ -351,6 +355,8 @@ Dispersion is another word for variance. Overdispersion is when there is greater
 
 **d.** Compare results with previous model, explain change in the significance of the treatment effect
 
+The poisson model more accurately explains the relationship between the treatment and and dependent variable, as rather there being a defined change between MPA and non-MPA zones, there is a chance that a count observation is in either. The p-value does decrease from the linear model to the poisson model, even though it was low before. This is likely due to the produced line just being a better fit along the data.
+
 ```{r}
 #HINT1: Incidence Ratio Rate (IRR): Exponentiation of beta returns coefficient which is interpreted as the 'percent change' for a one unit increase in the predictor 
 
@@ -388,10 +394,14 @@ ggplot(aes(x = treat, y = counts)) +
 
 **e.** Check the model assumptions. Explain results.
 
+Because a poisson model better represents the relationships in the data, the line generated is a better fit and therefore the residuals are approximately homoscedastic, as suggested by the homogeneity of variance graph. But the uniformity of residuals graph suggests that the line still isn't a very good fit, especially at the tails. This is further suggested by the posterior predictive check. The dispersion and zero-inflation graph also suggests a high degree of either. There also may be a few outliers; cook's distance identified 3 of them.
+
 **f.** Conduct tests for over-dispersion & zero-inflation. Explain results.
 
+There is a high degree of over-dispersion, potentially due to omitted variable bias. For the zero-inflation test, because the response variable isn't discrete or binary the zero-inflation test does not apply.
+
 ```{r}
-check_model(m2_pois)
+check_model(m2_pois, title_size = 7, axis_title_size = 7, base_size = 5, dot_size = 1)
 ```
 
 ```{r}
@@ -404,16 +414,25 @@ check_zeroinflation(m2_pois)
 
 **g.** Fit a negative binomial model using the function glm.nb() from the package `MASS` and check model diagnostics 
 
+
 **h.** In 1-2 sentences explain rationale for fitting this GLM model.
 
+The data violates a couple assumptions about poisson distributions, being mean != variance (overdispersion), and no zero counts. A negative binomial model is an alternative in which these violations are accounted for.
+
 **i.** Interpret the treatment estimate result in your own words. Compare with results from the previous model.
+
+When selecting a count value at random, there is a 28% difference in the chance of that count value being from either the treatment sites or the non-treatment sites, with it being more likely to be from the treatment sites if it's lower, and vice versa if it's higher. The poisson model actually had the same coefficient, but because many assumptions about poisson were violated, the line was not a good fit.
 
 ```{r}
 
 # NOTE: The `glm.nb()` function does not require a `family` argument
 
-m3_nb <- 
+m3_nb <- glm.nb(counts ~ treat, data = spiny_counts)
 
+```
+
+```{r}
+summ(m3_nb)
 ```
 
 
@@ -430,8 +449,14 @@ check_predictions(m3_nb)
 ```
 
 ```{r}
-check_model(m3_nb)
+check_model(m3_nb, title_size = 7, axis_title_size = 7, base_size = 5, dot_size = 1)
 ```
+
+```{r}
+check_outliers(m3_nb)
+```
+
+
 
 
 ------------------------------------------------------------------------
@@ -442,9 +467,11 @@ Step 6: Compare models
 
 **c.** Write a short paragraph comparing the results. Is the treatment effect `robust` or stable across the model specifications. 
 
+While the interpretation of the coefficients is different between the OLS and poisson/negative-binomial models, the general conclusion still holds true between all three, which is that the treatment is associated with lower lobster counts. This would make the treatment effect robust. The biggest difference between the models is the SE for OLS being so large, likely because it is not a well fitting line for the data.
+
 ```{r}
 
-export_summs(# ADD MODELS
+export_summs(m1_ols, m2_pois, m3_nb, # ADD MODELS
              model.names = c("OLS","Poisson", "NB"),
              statistics = "none")
 
@@ -464,7 +491,11 @@ Step 7: Building intuition - fixed effects
 
 **c.** Take a look at the regression output. Each coefficient provides a comparison or the difference in means for a specific sub-group in the data. Informally, describe the what the model has estimated at a conceptual level (NOTE: you do not have to interpret coefficients individually)
 
+Overall, the coefficients for treatment suggests that there is a positive correlation between MPAs and lobster counts when accounting for current year. The year20XX coefficients show the total change from the previous year. The treat:year20XX coefficients show what the difference of the average counts between the MPA and non-MPA sites in a given year.
+
 **d.** Explain why the main effect for treatment is negative? *Does this result make sense?
+
+Whether the the main effect coefficients are negative or positive doesn't matter that much, but it does make sense for several reasons. One, it represents the **difference** between treatment and non-treatment. Second, overall it seems that overall the treatment lobster counts are lower than the non-treatment.
 
 
 ```{r}
@@ -479,14 +510,22 @@ m5_fixedeffs <- lm(
 summ(m5_fixedeffs, model.fit = FALSE)
 ```
 
+```{r}
+spiny_counts %>% 
+    mutate(reg = fitted(m5_fixedeffs)) %>% 
+ggplot(aes(x = year, y = log(counts), fill = factor(treat))) + 
+    geom_col(position = 'dodge') + 
+    ggborderline::geom_borderline(aes(x = year, y = reg, color = factor(treat), bordercolour = 'black'), lwd = 1) + 
+    scale_fill_manual(values = viridisLite::mako(2, begin = 0.4, end = 0.8))+
+    scale_color_manual(values = viridisLite::mako(2, begin = 0.4, end = 0.8))
+```
+
+
 **e.** Look at the model predictions: Use the `interact_plot()` function from package `interactions` to plot mean predictions by year and treatment status. 
 
 **f.** Re-evaluate your responses (c) and (b) above. 
 
 ```{r}
-
-# Hint 1: Group counts by `year` and `mpa` and calculate the `mean_count`
-# Hint 2: Convert variable `year` to a factor
 
 interact_plot(m5_fixedeffs, pred = year, modx = treat,
               outcome.scale = "response")
@@ -505,9 +544,28 @@ The plot should have...
 # Hint 1: Group counts by `year` and `mpa` and calculate the `mean_count`
 # Hint 2: Convert variable `year` to a factor
 
-plot_counts <- 
+plot_counts <- spiny_counts %>% 
+    group_by(year, mpa) %>% 
+    mutate(mean_count = mean(counts),
+           year = as_factor(year)) %>%
+    summarize(mean_count = first(mean_count))
 
 # plot_counts %>% ggplot() ...
+
+plot_counts %>%
+    ggplot(aes(x = year, y = mean_count, group = mpa, color = mpa)) + 
+    geom_point(size = 4) + 
+    geom_line(aes(linetype = mpa), lwd = 1, show.legend = FALSE) + 
+    labs(title = expression(paste('Number of ', italic('P. interruptus'), ' by MPA Status Per Year')), 
+         x = 'Year',
+         y = 'Average Lobster Count',
+         color = 'MPA Status') + 
+    theme(plot.title = element_text(hjust = 0.5),
+          panel.background = element_rect(fill = 'white'),
+          panel.grid = element_line(color = 'grey92'),
+          axis.ticks = element_blank()) + 
+    scale_color_manual(values = c('#084779', '#9ED1F9')) + 
+    scale_linetype_manual(values = c(1, 2))
 ```
 
 ------------------------------------------------------------------------
@@ -515,12 +573,33 @@ plot_counts <-
 Step 8: Reconsider causal identification assumptions
 
 a. Discuss whether you think `spillover effects` are likely in this research context (see Glossary of terms; https://docs.google.com/document/d/1RIudsVcYhWGpqC-Uftk9UTz3PIq6stVyEpT44EPNgpE/edit?usp=sharing)
+
+There could be spillover effects, depending on a couple factors. One is the ecology of spiny lobsters, as well as ocean ecology broadly. The ocean is a big 3D environment, where individual organisms can travel long distance. Spiny lobsters themselves are known for seasonal migration, specifically from shallow waters to deep waters and back. There is a possibility of spiny lobsters migrating between sites. Potentially, if the treatment sites did experience an increase in population, that increase was nullified by reaching carrying capacity, or attracting predators of the species.
+
+Another possible factor is the enforcement of the MPA itself. MPA's may suffer from the edge affect, in which significant fishing activities occur at the edge of MPA zones reducing biodiversity therein (Tel-Aviv University, 2021). Such activities may have a significant effect on the MPA zone itself, despite being fully legal. The affect this has on neighboring zones is uncertain, but because the ocean ecosystem is largely interconnected, there is a possibility it can.
+
 b. Explain why spillover is an issue for the identification of causal effects
+
+With causal analysis, there is an assumption that the effect of the treatment is exclusive to the subjects that the treatment was a target of. When this possibly isn't the case, it becomes difficult to argue that the treatment itself was the cause of the effect of it. 
+
 c. How does spillover relate to impact in this research setting?
+
+The goal of this experiment was to say for certain whether MPA's increase spiny lobster populations or not. Causal research in a field setting is already difficult, but because of the conditions of the ocean ecosystem being what they are, the possibility of spillover between sites is too great to make a definitive conclusion about causality
+
 d. Discuss the following causal inference assumptions in the context of the MPA treatment effect estimator. Evaluate if each of the assumption are reasonable: 
     
     1) SUTVA: Stable Unit Treatment Value assumption 
+        *   There are two assumptions of SUTVA, no hidden variation and no interference. 
+        *   It's is theoretically true that there is not hidden variation, as in a legal sense the MPA laws were applied equally. But there is always the possibility of certain stocastic differences rearing their head, like minute regional differences in the likelihood of fishing in restricted zones and the ability of local enforcement to enforce the MPAs.
+        *   The assumption of no interference is the troublesome one however. As mentioned in the previous questions, the tendency of ocean species to travel long distances means that it is unlikely that this assumption holds up in it's entirety.
+    
     2) Excludability assumption
+        *   Generally speaking, this assumption is one that is impossible to prove in any field setting, especially in an ecological setting.
+        *   The ocean ecosystem is one that is normally very static but can randomly undergo sudden shifts in conditions. Meaning while the difference in the counts could potentially be attributed to the MPAs, unpredictable abiotic shifts can muddy the waters, unless these alternative variables are accounted for in the model. Given that it can be difficult to know when these shifts occur, this can be difficult, and therefore so is validating the excludability assumption.
+
+Citations:
+
+Tel-Aviv University. (2021, August 2). Overfishing and other human pressures are severely harming many marine protected areas around the world, study finds. ScienceDaily. Retrieved January 19, 2025 from www.sciencedaily.com/releases/2021/08/210802114940.htm
 
 ------------------------------------------------------------------------
 
