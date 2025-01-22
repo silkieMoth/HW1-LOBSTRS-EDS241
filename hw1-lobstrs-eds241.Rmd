@@ -92,7 +92,7 @@ Step 2: Read & wrangle data
 ```{r}
 # HINT: check for coding of missing values (`na = "-99999"`)
 
-rawdata <- read_csv(here('data', 'lobster_sbchannel_24.csv')) %>% 
+rawdata <- read_csv(here('data', 'spiny_abundance_sb_18.csv')) %>% 
     clean_names() %>% 
     mutate(size_mm = na_if(size_mm, -99999))
 ```
@@ -395,7 +395,7 @@ ggplot(aes(x = treat, y = counts)) +
 
 **e.** Check the model assumptions. Explain results.
 
-Because a poisson model better represents the relationships in the data, the line generated is a better fit and therefore the residuals are approximately homoscedastic, as suggested by the homogeneity of variance graph. But the uniformity of residuals graph suggests that the line still isn't a very good fit, especially at the tails. This is further suggested by the posterior predictive check. The dispersion and zero-inflation graph also suggests a high degree of either. There also may be a few outliers; cook's distance identified 3 of them.
+Because a poisson model better represents the relationships in the data, the line generated is a better fit and therefore the residuals are approximately homoscedastic, as suggested by the homogeneity of variance graph. But the uniformity of residuals graph suggests that the line still isn't a very good fit, especially at the tails. This is further suggested by the posterior predictive check. The dispersion and zero-inflation graph also suggests a high degree of either. There also may be a few outliers; cook's distance identified 5 of them.
 
 **f.** Conduct tests for over-dispersion & zero-inflation. Explain results.
 
@@ -516,7 +516,9 @@ spiny_counts %>%
     mutate(reg = fitted(m5_fixedeffs)) %>% 
 ggplot(aes(x = year, y = log(counts), fill = factor(treat))) + 
     geom_col(position = 'dodge') + 
-    ggborderline::geom_borderline(aes(x = year, y = reg, color = factor(treat), bordercolour = 'black'), lwd = 1) + 
+    geom_point(aes(x = year, y = reg), size = 5.5, show.legend = FALSE) +
+    geom_point(aes(x = year, y = reg, color = factor(treat)), size = 4, show.legend = FALSE) + 
+    ggborderline::geom_borderline(aes(x = year, y = reg, color = factor(treat), bordercolour = 'black'), lwd = 1, show.legend = FALSE) + 
     scale_fill_manual(values = viridisLite::mako(2, begin = 0.4, end = 0.8))+
     scale_color_manual(values = viridisLite::mako(2, begin = 0.4, end = 0.8))
 ```
@@ -609,9 +611,139 @@ Tel-Aviv University. (2021, August 2). Overfishing and other human pressures are
 > Use the recent lobster abundance data with observations collected up until 2024 (`lobster_sbchannel_24.csv`) to run an analysis evaluating the effect of MPA status on lobster counts using the same focal variables.
 
 a. Create a new script for the analysis on the updated data
+
+```{r}
+lobst_24 <- read_csv(here::here('data', 'lobster_sbchannel_24.csv')) %>% 
+    clean_names() %>% 
+    mutate(size_mm = na_if(size_mm, -99999))
+
+tidydata_24 <- lobst_24 %>%
+    mutate(reef = factor(site, 
+                         levels = c("AQUE", "CARP", "MOHK", "IVEE", "NAPL"), 
+                         labels = c("Arroyo Quemado", "Carpenteria", "Mohawk", "Isla Vista",  "Naples")))
+
+spiny_counts_24 <- tidydata_24 %>%
+    mutate(mpa = case_when(
+                  site %in% c("AQUE", "CARP", "MOHK") ~ 'MPA',
+                  site %in% c("IVEE", "NAPL") ~ 'non_MPA'
+              ), 
+              treat = case_when(
+                  mpa == 'MPA' ~ 1,
+                  mpa == 'non_MPA' ~ 0)) %>%
+    group_by(site, year, transect) %>%
+    reframe(counts = n(), 
+            mean_size = mean(size_mm, na.rm = TRUE), 
+            mpa = first(mpa),
+            treat = first(treat))
+```
+
+
 b. Run at least 3 regression models & assess model diagnostics
+
+```{r}
+lob_24_ols <- lm(counts ~ treat, spiny_counts_24)
+
+summ(lob_24_ols)
+```
+
+```{r}
+check_model(lob_24_ols, title_size = 7, axis_title_size = 7, base_size = 5, dot_size = 1)
+```
+
+
+```{r}
+lob_24_poisson <- glm(counts ~ treat, family = poisson(link = 'log'), data = spiny_counts_24)
+
+summ(lob_24_poisson)
+```
+
+```{r}
+check_model(lob_24_poisson, title_size = 7, axis_title_size = 7, base_size = 5, dot_size = 1)
+```
+
+```{r}
+check_overdispersion(lob_24_poisson)
+check_zeroinflation(lob_24_poisson)
+```
+
+
+```{r}
+lob_24_nb <- glm.nb(counts ~ treat, data = spiny_counts_24)
+
+summ(lob_24_nb)
+```
+
+```{r}
+check_model(lob_24_nb, title_size = 7, axis_title_size = 7, base_size = 5, dot_size = 1)
+```
+
+```{r}
+check_overdispersion(lob_24_nb)
+check_zeroinflation(lob_24_nb)
+```
+
+
+```{r}
+export_summs(lob_24_ols, lob_24_poisson, lob_24_nb,
+             model.names = c("OLS","Poisson", "NB"),
+             statistics = "none")
+```
+
+```{r}
+spiny_counts_24 %>% 
+    mutate(reg_ols = fitted(lob_24_ols),
+           reg_poisson = fitted(lob_24_poisson), 
+           reg_nb = fitted(lob_24_nb)) %>% 
+    ggplot(aes(x = treat, y = counts)) + 
+    geom_jitter() + 
+    geom_line(aes(x = treat, y = reg_ols)) + 
+    geom_line(aes(x = treat, y = reg_poisson)) + 
+    geom_line(aes(x = treat, y = reg_nb)) +
+    scale_x_continuous(breaks = c(0,1), labels = c('non-Treatment', 'Treatment'))
+```
+
+
+
 c. Compare and contrast results with the analysis from the 2012-2018 data sample (~ 2 paragraphs)
 
+```{r}
+export_summs(m1_ols, lob_24_ols, m2_pois, lob_24_poisson, m3_nb, lob_24_nb, 
+             model.names = c("OLS 2018","OLS 2024", "Poisson 2018", 'Poisson 2024', 'NB 2018', 'NB 2024'),
+             statistics = "none")
+```
+### OLS
+```{r}
+check_model(m1_ols, title_size = 7, axis_title_size = 7, base_size = 5, dot_size = 1)
+```
+
+```{r}
+check_model(lob_24_ols, title_size = 7, axis_title_size = 7, base_size = 5, dot_size = 1)
+```
+
+
+### Poisson
+```{r}
+check_model(m2_pois, title_size = 7, axis_title_size = 7, base_size = 5, dot_size = 1)
+```
+
+```{r}
+check_model(lob_24_poisson, title_size = 7, axis_title_size = 7, base_size = 5, dot_size = 1)
+```
+
+
+# Negative Binomial
+```{r}
+check_model(m3_nb, title_size = 7, axis_title_size = 7, base_size = 5, dot_size = 1)
+```
+
+```{r}
+check_model(lob_24_nb, title_size = 7, axis_title_size = 7, base_size = 5, dot_size = 1)
+```
+
+    There does not appear to be any meaningful difference between the 2018 regressions and the 2024 regressions. They all experience the same problems (or don't) regarding homoskedacity, residual variance and overdispersion. They also arrive at the same conclusions. 
+    The only differences between the two datasets are that:
+        *   The 2024 data is more nonlinear
+        *   The poisson model for 2024 has fewer outliers
 
 ------------------------------------------------------------------------
 
