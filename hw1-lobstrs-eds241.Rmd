@@ -2,15 +2,15 @@
 title: "Assignment 1: California Spiny Lobster Abundance (*Panulirus Interruptus*)"
 subtitle: "Assessing the Impact of Marine Protected Areas (MPAs) at 5 Reef Sites in Santa Barbara County"
 author: "EDS 241"
-date: "1/8/2024 (Due 1/22)"
+date: "`r Sys.Date()`"
 output: 
+    pdf_document: default
     html_document:
       theme: flatly
-    pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(eval=FALSE, warning = FALSE, message = FALSE )
+knitr::opts_chunk$set(eval=TRUE, warning = FALSE, message = FALSE )
 ```
 
 ------------------------------------------------------------------------
@@ -37,7 +37,7 @@ knitr::opts_chunk$set(eval=FALSE, warning = FALSE, message = FALSE )
 
 ----------------------------------------------------------------------
 
-```{r}
+```{r, eval=TRUE}
 
 library(tidyverse)
 library(here)
@@ -62,13 +62,13 @@ Reed D. 2019. SBC LTER: Reef: Abundance, size and fishing effort for California 
 
 ### **Introduction**
 
-You're about to dive into some deep data collected from five reef sites in Santa Barbara County, all about the abundance of California spiny lobsters! 🦞 Data was gathered by divers annually from 2012 to 2018 across Naples, Mohawk, Isla Vista, Carpinteria, and Arroyo Quemado reefs.
+You're about to dive into some deep data collected from five reef sites in Santa Barbara County, all about the abundance of California spiny lobsters! Data was gathered by divers annually from 2012 to 2018 across Naples, Mohawk, Isla Vista, Carpinteria, and Arroyo Quemado reefs.
 
 Why lobsters? Well, this sample provides an opportunity to evaluate the impact of Marine Protected Areas (MPAs) established on January 1, 2012 (Reed, 2019). Of these five reefs, Naples, and Isla Vista are MPAs, while the other three are not protected (non-MPAs). Comparing lobster health between these protected and non-protected areas gives us the chance to study how commercial and recreational fishing might impact these ecosystems.
 
 We will consider the MPA sites the `treatment` group and use regression methods to explore whether protecting these reefs really makes a difference compared to non-MPA sites (our control group). In this assignment, we’ll think deeply about which causal inference assumptions hold up under the research design and identify where they fall short. 
 
-Let’s break it down step by step and see what the data reveals! 📊
+Let’s break it down step by step and see what the data reveals!
 
 ![](figures/map-5reefs.png)
 
@@ -89,7 +89,7 @@ Step 2: Read & wrangle data
 
 **b.** Use the function `clean_names()` from the `janitor` package
 
-```{r}
+```{r, eval=TRUE}
 # HINT: check for coding of missing values (`na = "-99999"`)
 
 rawdata <- read_csv(here('data', 'spiny_abundance_sb_18.csv')) %>% 
@@ -101,12 +101,20 @@ rawdata <- read_csv(here('data', 'spiny_abundance_sb_18.csv')) %>%
     
     "Arroyo Quemado", "Carpenteria", "Mohawk", "Isla Vista",  "Naples"
 
-```{r}
+```{r, eval=TRUE}
 
 tidydata <- rawdata %>%
     mutate(reef = factor(site, 
-                         levels = c("AQUE", "CARP", "MOHK", "IVEE", "NAPL"), 
-                         labels = c("Arroyo Quemado", "Carpenteria", "Mohawk", "Isla Vista",  "Naples")))
+                         levels = c("AQUE", 
+                                    "CARP", 
+                                    "MOHK", 
+                                    "IVEE", 
+                                    "NAPL"), 
+                         labels = c("Arroyo Quemado", 
+                                    "Carpenteria", 
+                                    "Mohawk", 
+                                    "Isla Vista",  
+                                    "Naples")))
     
 ```
 
@@ -120,12 +128,14 @@ Create new `df` named `spiny_counts`
 
 **e.** Create a new variable `mpa` with levels `MPA` and `non_MPA`. For our regression analysis create a numerical variable `treat` where MPA sites are coded `1` and non_MPA sites are coded `0`
 
-```{r}
+```{r, eval=TRUE}
 #HINT(d): Use `group_by()` & `summarize()` to provide the total number of lobsters observed at each site-year-transect row-observation. 
 
 #HINT(e): Use `case_when()` to create the 3 new variable columns
 
 spiny_counts <- tidydata %>%
+    
+    # classify sites by treatment
     mutate(mpa = case_when(
                   site %in% c("AQUE", "CARP", "MOHK") ~ 'non_MPA',
                   site %in% c("IVEE", "NAPL") ~ 'MPA'
@@ -133,6 +143,8 @@ spiny_counts <- tidydata %>%
               treat = case_when(
                   mpa == 'MPA' ~ 1,
                   mpa == 'non_MPA' ~ 0)) %>%
+    
+    
     group_by(site, year, transect) %>%
     summarize(counts = sum(count, na.rm = TRUE), 
             mean_size = mean(size_mm, na.rm = TRUE), 
@@ -167,53 +179,103 @@ Create a plot of lobster **size** :
 
 4) You choose the grouping variable(s)!
 
-```{r}
+```{r, eval=TRUE}
 # plot 1: violin w SD
 
 spiny_counts %>% 
-    ggplot(aes(x = counts, y = factor(site, levels = c('IVEE', 'CARP', 'MOHK', 'NAPL', 'AQUE')))) + 
+    ggplot(aes(x = counts, y = factor(site, 
+                                      levels = c('IVEE', 
+                                                 'CARP', 
+                                                 'MOHK', 
+                                                 'NAPL', 
+                                                 'AQUE')))) + 
     geom_violin(width = 1.5) + 
+    
+    #  plot standard deviation lines
     stat_summary(fun.data="mean_sdl", fun.args = c(mult = 1), 
                  geom="pointrange", aes(color = 'Standard Deviation')) +
+    
+    
     labs(x = 'Lobster Counts', 
         y = 'Site',
         title = 'Lobster Populations in Experimental MPA Sites') + 
+    
+    # format line color and legend
     scale_color_manual(name = '', values = c('red')) + 
+    
+    # shrink edges of graph
     scale_x_continuous(expand = c(0, NA)) + 
-    annotate('text', x = 125, y = 1.25:5.25, label = c(paste('SD:', sd(filter(spiny_counts, site == 'IVEE')$counts)), 
-                                                 paste('SD:', sd(filter(spiny_counts, site == 'CARP')$counts)),
-                                                 paste('SD:', sd(filter(spiny_counts, site == 'MOHK')$counts)),
-                                                 paste('SD:', sd(filter(spiny_counts, site == 'NAPL')$counts)),
-                                                 paste('SD:', sd(filter(spiny_counts, site == 'AQUE')$counts)))) + 
-    guides(fill = FALSE) + 
-    theme(plot.title = element_text(hjust = 0.5),
+    
+    # place SD coefficients
+    annotate('text', x = 125, 
+             y = 1.25:5.25, 
+             label = c(paste('SD:', sd(filter(spiny_counts, site == 'IVEE')$counts)), 
+                       paste('SD:', sd(filter(spiny_counts, site == 'CARP')$counts)), 
+                       paste('SD:', sd(filter(spiny_counts, site == 'MOHK')$counts)), 
+                       paste('SD:', sd(filter(spiny_counts, site == 'NAPL')$counts)), 
+                       paste('SD:', sd(filter(spiny_counts, site == 'AQUE')$counts)))) + 
+    
+    
+    theme(plot.title = element_text(hjust = 0.5), # center title
           legend.position = 'inside',
           legend.position.inside = c(0.8, 0.8),
-          legend.background = element_blank(),
-          legend.box.background = element_rect(color = 'black', linetype = 1),
+          legend.background = element_blank(), # remove legend background
+          legend.box.background = element_rect(color = 'black', linetype = 1), # recreate bg with border
           legend.margin = margin(-18,3,0,3),
-          legend.key = element_blank())
+          legend.key = element_blank()) # remove legend icon backgrounds
 ```
 
-```{r}
+```{r, eval=TRUE}
 # plot 2: ridge
 
 spiny_counts %>% 
     ggplot(aes(x = counts, fill = mpa)) + 
         geom_density(alpha = 0.5) + 
-    geom_vline(aes(xintercept = c(quantile(filter(spiny_counts, mpa == 'MPA')$counts, na.rm = TRUE)[3]), 
+    
+    # MPA median line
+    geom_vline(aes(xintercept = c(quantile(filter(spiny_counts, 
+                                                  mpa == 'MPA')$counts, 
+                                           na.rm = TRUE)[3]), 
                    color = 'MPA'), 
                lwd = 1.5) +
-    geom_vline(aes(xintercept = c(quantile(filter(spiny_counts, mpa == 'non_MPA')$counts, na.rm = TRUE)[3]), 
+    
+    # Non-MPA median line
+    geom_vline(aes(xintercept = c(quantile(filter(spiny_counts, 
+                                                  mpa == 'non_MPA')$counts, 
+                                           na.rm = TRUE)[3]), 
                    color = 'Non-MPA'), 
                lwd = 1.5) + 
+    
+    
     labs(y = 'Density',
          x = 'Lobster Counts',
-         title = 'Affect of MPA Zone Treatment on Lobster Population') + 
-    guides(fill = guide_legend(title = 'MPA Status')) + 
+         title = 'Affect of MPA Zone Treatment on Lobster Population') +
+    
+    # legend title
+    guides(fill = guide_legend(title = 'MPA Status')) +
+    
+    # make and color legend for means
     scale_color_manual(name = 'Medians', values = c('MPA' = 'red', 'Non-MPA' = 'blue')) + 
-    annotate('text', x = 200, y = 0.035, label = c('Medians'), size = 5, fontface = 'bold') + 
-    annotate('text', x = 200, y = c(0.031, 0.029), label = c(paste('MPA:', median(filter(spiny_counts, mpa == 'MPA')$counts)), paste('Non-MPA', median(filter(spiny_counts, mpa == 'non_MPA')$counts))), family = 'serif') + 
+    
+    # median text
+    annotate('text', 
+             x = 200, 
+             y = 0.035, 
+             label = c('Medians'), 
+             size = 5, 
+             fontface = 'bold') + 
+    annotate('text', 
+             x = 200, 
+             y = c(0.031, 0.029), 
+             label = c(paste('MPA:', 
+                             median(filter(spiny_counts, 
+                                           mpa == 'MPA')$counts)), 
+                       paste('Non-MPA', 
+                             median(filter(spiny_counts, 
+                                           mpa == 'non_MPA')$counts))), 
+             family = 'serif') + 
+    
+    # center title
     theme(plot.title = element_text(hjust = 0.5))
 ```
 
@@ -221,45 +283,98 @@ spiny_counts %>%
 # # plot 3: histogram
 spiny_counts %>% 
     ggplot(aes(x = counts, y = as.factor(year), fill = stat(quantile))) +
+    
+    # ridge plot with quantiles
     ggridges::stat_density_ridges(quantile_lines = FALSE, 
                                   calc_ecdf = TRUE,
                                   geom = "density_ridges_gradient") + 
+    
+    
     labs(x = 'Lobster Counts',
          y = 'Year',
          title = 'Lobster Population by Year Along the Santa Barbara Coastal Region') + 
+    
+    # cut graph to edges
     scale_x_continuous(expand = c(0, NA)) + 
+    
+    # rename, recolor, relabel quantile legend
     scale_fill_manual(name = "Quantile",
                       values = viridisLite::mako(4),
                       labels = c('25%', '50%', '75%', '100%')) + 
+    
+    # center title
     theme(plot.title = element_text(hjust = 0.5))
 
 ```
 
 ```{r}
-# plot 4: ...
+# plot 4: beeswarm
 spiny_counts %>% 
     ggplot(aes(x = mpa, y = mean_size, color = site)) + 
         ggbeeswarm::geom_beeswarm(cex = 1.5) + 
-    geom_hline(aes(yintercept = mean(filter(spiny_counts, site == 'IVEE')$mean_size, na.rm = TRUE)), 
+    
+    # mean lines by site
+    geom_hline(aes(yintercept = mean(filter(spiny_counts, 
+                                            site == 'IVEE')$mean_size, 
+                                     na.rm = TRUE)), 
                color = viridisLite::turbo(5)[3]) +
-    geom_hline(aes(yintercept = mean(filter(spiny_counts, site == 'CARP')$mean_size, na.rm = TRUE)), 
+    geom_hline(aes(yintercept = mean(filter(spiny_counts, 
+                                            site == 'CARP')$mean_size, 
+                                     na.rm = TRUE)), 
                color = viridisLite::turbo(5)[2]) + 
-    geom_hline(aes(yintercept = mean(filter(spiny_counts, site == 'MOHK')$mean_size, na.rm = TRUE)), 
+    geom_hline(aes(yintercept = mean(filter(spiny_counts, 
+                                            site == 'MOHK')$mean_size, 
+                                     na.rm = TRUE)), 
                color = viridisLite::turbo(5)[4]) +
-    geom_hline(aes(yintercept = mean(filter(spiny_counts, site == 'NAPL')$mean_size, na.rm = TRUE)), 
+    geom_hline(aes(yintercept = mean(filter(spiny_counts, 
+                                            site == 'NAPL')$mean_size, 
+                                     na.rm = TRUE)), 
                color = viridisLite::turbo(5)[5]) + 
-    geom_hline(aes(yintercept = mean(filter(spiny_counts, site == 'AQUE')$mean_size, na.rm = TRUE)), 
+    geom_hline(aes(yintercept = mean(filter(spiny_counts, 
+                                            site == 'AQUE')$mean_size, 
+                                     na.rm = TRUE)), 
                color = viridisLite::turbo(5)[1]) + 
+    
+    # retitle legend
     guides(color = guide_legend(title = 'Site')) + 
-    annotate('text', x = 1.1, y = 115, label = 'Mean size by site depicted by respective colors:') + 
-    annotate("segment", x = c(0.65, 0.85, 1.05, 1.25, 1.45), xend = c(0.8, 1, 1.2, 1.4, 1.6), y = 110, yend = 110,
-  color = viridisLite::turbo(5), lwd = 1.5) + 
-    annotate('rect', xmin = 0.4, xmax = 1.8, ymin = 105, ymax = 120, fill = NA, color = '#00000070', lwd = 1) + 
-    labs(title = 'Mean Spiny Lobster Size in MPA vs Non-MPA Zones\nAlong the Southern California Coast',
+    
+    # make legend for mean lines
+    annotate('text', 
+             x = 1.1, 
+             y = 115, 
+             label = 'Mean size by site depicted by respective colors:', 
+             size = 3) + 
+    annotate("segment", 
+             x = c(0.65, 0.85, 1.05, 1.25, 1.45), 
+             xend = c(0.8, 1, 1.2, 1.4, 1.6), 
+             y = 110, 
+             yend = 110,
+  color = viridisLite::turbo(5), 
+  lwd = 1.5) + 
+    annotate('rect', 
+             xmin = 0.4, 
+             xmax = 1.8, 
+             ymin = 105, 
+             ymax = 120, 
+             fill = NA, 
+             color = '#00000070', 
+             lwd = 1) + 
+    
+    
+    labs(title = 'Mean Spiny Lobster Size in MPA vs Non-MPA Zones\n
+                        Along the Southern California Coast',
          x = 'MPA Status', 
          y = 'Mean Size (mm)') + 
+    
+    # center title
     theme(plot.title = element_text(size = 13, hjust = 0.5)) + 
-    scale_color_manual(labels = c('Arroyo Quemado', 'Carpenteria', 'Isla Vista', 'Mohawk', 'Naples'), 
+    
+    # relabel and recolor legend
+    scale_color_manual(labels = c('Arroyo Quemado', 
+                                  'Carpenteria', 
+                                  'Isla Vista', 
+                                  'Mohawk', 
+                                  'Naples'), 
                        values = viridisLite::turbo(5))
     
 ```
@@ -270,9 +385,9 @@ spiny_counts %>%
 # USE: gt_summary::tbl_summary()
 tbl_summary(spiny_counts, 
             treat, 
-            statistic = list(all_continuous() ~ "{mean}"), 
-            include = c(counts, mean_size), 
-            missing = 'no')
+            statistic = list(all_continuous() ~ "{mean}"),  # just the mean
+            include = c(counts, mean_size),  # select columns
+            missing = 'no') # don't include unknown value row
 ```
 
 ------------------------------------------------------------------------
@@ -291,21 +406,25 @@ This model would suggest that we cannot make any deterministic claims about if t
 m1_ols <- lm(counts ~ treat, spiny_counts)
 
 summ(m1_ols, model.fit = FALSE) 
-```
 
-```{r}
-summary(m1_ols)
+cat('r_squared:', summary(m1_ols)$r.squared)
 ```
 
 
 ```{r}
+# plot OLS line
+
 spiny_counts %>% 
     ungroup() %>% 
     mutate(reg = fitted(m1_ols)) %>% 
 ggplot(aes(x = treat, y = counts)) + 
     geom_point() + 
     geom_line(aes(x = treat, y = reg), linetype = 5, linewidth = 1) + 
-    scale_x_continuous(breaks = c(0,1), labels = c('non-Treatment', 'Treatment'))
+    scale_x_continuous(breaks = c(0,1), labels = c('non-Treatment', 'Treatment'))  + 
+    labs(x = 'Counts',
+         y = 'Treatment', 
+         title = 'OLS Model') + 
+    theme(plot.title = element_text(hjust = 0.5))
 
 ```
 
@@ -361,16 +480,11 @@ The poisson model more accurately explains the relationship between the treatmen
 
 m2_pois <- glm(counts ~ treat, family = poisson(link = 'log'), data = spiny_counts)
 
-summary(m2_pois)
-
-```
-
-```{r}
 summ(m2_pois)
 ```
 
 
-```{r}
+```{r, include=FALSE, eval=FALSE}
 # getting mcfadden pseudo r2
 
 loglik_glm <- logLik(m2_pois)
@@ -381,13 +495,19 @@ loglik_glm_null <- logLik(glm(counts ~ 1, family = poisson(link = 'log'), data =
 
 
 ```{r}
+# plot poisson curve
+
 spiny_counts %>% 
     ungroup %>% 
     mutate(reg = fitted(m2_pois)) %>% 
 ggplot(aes(x = treat, y = counts)) + 
     geom_point() + 
     geom_line(aes(x = treat, y = reg), linetype = 5, linewidth = 1) + 
-    scale_x_continuous(breaks = c(0,1), labels = c('non-Treatment', 'Treatment'))
+    scale_x_continuous(breaks = c(0,1), labels = c('non-Treatment', 'Treatment')) + 
+    labs(x = 'Counts',
+         y = 'Treatment', 
+         title = 'Poisson Model') + 
+    theme(plot.title = element_text(hjust = 0.5))
 ```
 
 
@@ -444,17 +564,8 @@ check_zeroinflation(m3_nb)
 ```
 
 ```{r}
-check_predictions(m3_nb)
-```
-
-```{r}
 check_model(m3_nb, title_size = 7, axis_title_size = 7, base_size = 5, dot_size = 1)
 ```
-
-```{r}
-check_outliers(m3_nb)
-```
-
 
 
 
@@ -494,7 +605,7 @@ Overall, the coefficients for treatment suggests that there is a significant neg
 
 **d.** Explain why the main effect for treatment is negative? *Does this result make sense?
 
-The main treatment coefficient is negative because the treatment effect in this parallel slopes model is negative, as in there is a significant negative difference between the treatment and non-treatment sites for lobster populations where treatment sites are correlated with lower counts. I suppose this could make sense in the model itself. In real life, it would depend if time is a determinist varible for lobster populations as it relates to the MPA treatment.
+The main treatment coefficient is negative because the treatment effect in this parallel slopes model is negative, as in there is a significant negative difference between the treatment and non-treatment sites for lobster populations where treatment sites are correlated with lower counts. I suppose this could make sense in the model itself. In real life, it would depend if time is a deterministic variable for lobster populations as it relates to the MPA treatment.
 
 
 ```{r}
@@ -510,22 +621,41 @@ summ(m5_fixedeffs, model.fit = FALSE)
 ```
 
 ```{r}
+# plot fixed effects model
+
 spiny_counts %>% 
-    ungroup() %>% 
-    mutate(reg = fitted(m5_fixedeffs)) %>% 
-ggplot(aes(x = year, y = log(counts), fill = factor(treat))) + 
+    ungroup() %>% # get errors without ungrouping
+    mutate(reg = fitted(m5_fixedeffs)) %>% # create column with fitted line
+ggplot(aes(x = year, y = log(counts), 
+           fill = factor(treat))) + 
     geom_col(position = 'dodge') + 
-    geom_point(aes(x = year, y = reg), size = 5.5, show.legend = FALSE) +
-    geom_point(aes(x = year, y = reg, color = factor(treat)), size = 4, show.legend = FALSE) + 
-    ggborderline::geom_borderline(aes(x = year, y = reg, color = factor(treat), bordercolour = 'black'), lwd = 1, show.legend = FALSE) + 
-    scale_fill_manual(values = viridisLite::mako(2, begin = 0.4, end = 0.8))+
-    scale_color_manual(values = viridisLite::mako(2, begin = 0.4, end = 0.8))
+    geom_point(aes(x = year, y = reg), 
+               size = 5.5, 
+               show.legend = FALSE) +
+    geom_point(aes(x = year, y = reg, color = factor(treat)), 
+               size = 4, 
+               show.legend = FALSE) + 
+    ggborderline::geom_borderline(aes(x = year, 
+                                      y = reg, 
+                                      color = factor(treat), 
+                                      bordercolour = 'black'), 
+                                  lwd = 1, 
+                                  show.legend = FALSE) + 
+    scale_fill_manual(values = viridisLite::mako(2, begin = 0.4, end = 0.8)) +
+    scale_color_manual(values = viridisLite::mako(2, begin = 0.4, end = 0.8)) + 
+    labs(x = 'Year',
+         y = 'Log-Counts', 
+         title = 'Lobster Population by Treatment and Year') + 
+    guides(fill = guide_legend(title = 'Treatment')) + 
+    theme(plot.title = element_text(hjust = 0.5))
 ```
 
 
 **e.** Look at the model predictions: Use the `interact_plot()` function from package `interactions` to plot mean predictions by year and treatment status. 
 
 **f.** Re-evaluate your responses (c) and (b) above. 
+
+I had used the above visualization to answer the question initially, so I stand by my answer.
 
 ```{r}
 
@@ -537,9 +667,9 @@ interact_plot(m5_fixedeffs, pred = year, modx = treat,
 **g.** Using `ggplot()` create a plot in same style as the previous `interaction plot`, but displaying the original scale of the outcome variable (lobster counts). This type of plot is commonly used to show how the treatment effect changes across discrete time points (i.e., panel data).
 
 The plot should have... 
-- `year` on the x-axis
-- `counts` on the y-axis
-- `mpa` as the grouping variable
+*   `year` on the x-axis
+*   `counts` on the y-axis
+*   `mpa` as the grouping variable
 
 
 ```{r}
@@ -548,25 +678,37 @@ The plot should have...
 
 plot_counts <- spiny_counts %>% 
     group_by(year, mpa) %>% 
-    mutate(tot_count = sum(counts),
-           year = as_factor(year)) %>%
-    summarize(tot_count = first(tot_count))
+    mutate(tot_count = sum(counts), # total counts by year and mpa
+           year = as_factor(year)) %>% # make year a factor variable
+    summarize(tot_count = first(tot_count)) # crunch df to one row per year and treatment
 
 # plot_counts %>% ggplot() ...
 
 plot_counts %>%
     ggplot(aes(x = year, y = tot_count, group = mpa, color = mpa)) + 
     geom_point(size = 4) + 
-    geom_line(aes(linetype = mpa), lwd = 1, show.legend = FALSE) + 
-    labs(title = expression(paste('Number of ', italic('P. interruptus'), ' by MPA Status Per Year')), 
+    
+    # plot model lines by treatment visualized by line type
+    geom_line(aes(linetype = mpa), lwd = 1, show.legend = FALSE) +
+    
+    
+    labs(title = expression(paste('Number of ', 
+                                  italic('P. interruptus'), 
+                                  ' by MPA Status Per Year')), 
          x = 'Year',
          y = 'Total Lobster Count',
          color = 'MPA Status') + 
-    theme(plot.title = element_text(hjust = 0.5),
-          panel.background = element_rect(fill = 'white'),
-          panel.grid = element_line(color = 'grey92'),
-          axis.ticks = element_blank()) + 
+    
+    
+    theme(plot.title = element_text(hjust = 0.5), # center title
+          panel.background = element_rect(fill = 'white'), # make background blend in
+          panel.grid = element_line(color = 'grey92'), # make grid visible
+          axis.ticks = element_blank()) + # remove axis ticks
+    
+    
     scale_color_manual(values = c('#084779', '#9ED1F9')) + 
+    
+    # specify mpa statuses different linetypes
     scale_linetype_manual(values = c(1, 2))
 ```
 
@@ -614,14 +756,25 @@ a. Create a new script for the analysis on the updated data
 ```{r}
 lobst_24 <- read_csv(here::here('data', 'lobster_sbchannel_24.csv')) %>% 
     clean_names() %>% 
-    mutate(size_mm = na_if(size_mm, -99999))
+    mutate(size_mm = na_if(size_mm, -99999)) # make null values NA
 
+# reorder and relabel data by site
 tidydata_24 <- lobst_24 %>%
     mutate(reef = factor(site, 
-                         levels = c("AQUE", "CARP", "MOHK", "IVEE", "NAPL"), 
-                         labels = c("Arroyo Quemado", "Carpenteria", "Mohawk", "Isla Vista",  "Naples")))
+                         levels = c("AQUE", 
+                                    "CARP", 
+                                    "MOHK", 
+                                    "IVEE", 
+                                    "NAPL"), 
+                         labels = c("Arroyo Quemado", 
+                                    "Carpenteria", 
+                                    "Mohawk", 
+                                    "Isla Vista", 
+                                    "Naples")))
 
 spiny_counts_24 <- tidydata_24 %>%
+    
+    # classify sites by treatment
     mutate(mpa = case_when(
                   site %in% c("AQUE", "CARP", "MOHK") ~ 'non_MPA',
                   site %in% c("IVEE", "NAPL") ~ 'MPA'
@@ -630,7 +783,7 @@ spiny_counts_24 <- tidydata_24 %>%
                   mpa == 'MPA' ~ 1,
                   mpa == 'non_MPA' ~ 0)) %>%
     group_by(site, year, transect) %>%
-    summarize(counts = sum(count, na.rm = TRUE), 
+    summarize(counts = sum(count, na.rm = TRUE),
             mean_size = mean(size_mm, na.rm = TRUE), 
             mpa = first(mpa),
             treat = first(treat))
@@ -651,7 +804,9 @@ check_model(lob_24_ols, title_size = 7, axis_title_size = 7, base_size = 5, dot_
 
 
 ```{r}
-lob_24_poisson <- glm(counts ~ treat, family = poisson(link = 'log'), data = spiny_counts_24)
+lob_24_poisson <- glm(counts ~ treat, 
+                      family = poisson(link = 'log'), 
+                      data = spiny_counts_24)
 
 summ(lob_24_poisson)
 ```
@@ -699,7 +854,11 @@ spiny_counts_24 %>%
     geom_line(aes(x = treat, y = reg_ols)) + 
     geom_line(aes(x = treat, y = reg_poisson)) + 
     geom_line(aes(x = treat, y = reg_nb)) +
-    scale_x_continuous(breaks = c(0,1), labels = c('non-Treatment', 'Treatment'))
+    scale_x_continuous(breaks = c(0,1), labels = c('non-Treatment', 'Treatment')) + 
+    labs(x = 'Counts',
+         y = 'Treatment', 
+         title = 'Lobster Counts by Treatment with Fitted Model Lines') + 
+    theme(plot.title = element_text(hjust = 0.5))
 ```
 
 
@@ -707,8 +866,10 @@ spiny_counts_24 %>%
 c. Compare and contrast results with the analysis from the 2012-2018 data sample (~ 2 paragraphs)
 
 ```{r}
-export_summs(m1_ols, lob_24_ols, m2_pois, lob_24_poisson, m3_nb, lob_24_nb, 
-             model.names = c("OLS 2018","OLS 2024", "Poisson 2018", 'Poisson 2024', 'NB 2018', 'NB 2024'),
+export_summs(m1_ols, lob_24_ols, m2_pois, 
+             lob_24_poisson, m3_nb, lob_24_nb, 
+             model.names = c("OLS 2018","OLS 2024", "Poisson 2018", 
+                             'Poisson 2024', 'NB 2018', 'NB 2024'),
              statistics = "none")
 ```
 ### OLS
@@ -731,7 +892,7 @@ check_model(lob_24_poisson, title_size = 7, axis_title_size = 7, base_size = 5, 
 ```
 
 
-# Negative Binomial
+### Negative Binomial
 ```{r}
 check_model(m3_nb, title_size = 7, axis_title_size = 7, base_size = 5, dot_size = 1)
 ```
